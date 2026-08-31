@@ -27,39 +27,50 @@ tasks:
       GOARCH: "{{.ARCH | default ARCH}}"
       PRODUCTION: '{{.PRODUCTION | default "false"}}'
 
-  stage:portable:
-    summary: Copies the green zip to bundled/portable.zip for go:embed
-    cmds:
-      - cmd: >-
-          powershell -NoProfile -Command
-          "if (-not (Test-Path '{{.PORTABLE_ZIP}}')) { throw 'portable zip not found: {{.PORTABLE_ZIP}}' };
-          New-Item -ItemType Directory -Force bundled | Out-Null;
-          Copy-Item -Force '{{.PORTABLE_ZIP}}' 'bundled/portable.zip'"
-    vars:
-      PORTABLE_ZIP: '{{.PORTABLE_ZIP | default (printf "../portable/release/Octop-windows-%s.zip" (.ARCH | default ARCH))}}'
-
   package:
-    summary: Packages a single production exe with the portable runtime embedded
+    summary: Builds a slim GUI exe and wraps it with the portable zip in an NSIS installer
     cmds:
-      - task: stage:portable
-        vars:
-          ARCH: "{{.ARCH}}"
-          PORTABLE_ZIP: "{{.PORTABLE_ZIP}}"
       - task: build
         vars:
           PRODUCTION: "true"
           ARCH: "{{.ARCH}}"
       - cmd: >-
           powershell -NoProfile -Command
-          "Remove-Item -Force '{{.ARCHIVE}}' -ErrorAction SilentlyContinue;
-          Remove-Item -Force '{{.BIN_DIR}}/{{.APP_NAME}}-Desktop-windows-{{.ARCH}}.zip' -ErrorAction SilentlyContinue;
-          Remove-Item -Recurse -Force '{{.BIN_DIR}}/{{.APP_NAME}}-Desktop-windows-{{.ARCH}}' -ErrorAction SilentlyContinue;
-          Copy-Item '{{.BIN_DIR}}/{{.APP_NAME}}.exe' '{{.ARCHIVE}}';
-          Remove-Item -Force 'bundled/portable.zip' -ErrorAction SilentlyContinue"
+          "if (-not (Test-Path '{{.PORTABLE_ZIP}}')) { throw 'portable zip not found: {{.PORTABLE_ZIP}}' };
+          Copy-Item -Force '{{.PORTABLE_ZIP}}' 'build/windows/nsis/runtime.zip'"
+        platforms: [windows]
+      - cmd: |
+          test -f "{{.PORTABLE_ZIP}}"
+          cp "{{.PORTABLE_ZIP}}" build/windows/nsis/runtime.zip
+        platforms: [linux, darwin]
+      - task: create:nsis:installer
+        vars:
+          ARCH: "{{.ARCH}}"
     vars:
       ARCH: "{{.ARCH | default ARCH}}"
       PORTABLE_ZIP: '{{.PORTABLE_ZIP | default (printf "../portable/release/Octop-windows-%s.zip" .ARCH)}}'
-      ARCHIVE: '{{.BIN_DIR}}/{{.APP_NAME}}-Desktop-windows-{{.ARCH}}.exe'
+
+  create:nsis:installer:
+    summary: Creates an NSIS installer (Octop.exe + Octop-windows-<arch>.zip)
+    dir: build/windows/nsis
+    preconditions:
+      - sh: command -v makensis >/dev/null 2>&1
+        msg: "makensis is required (install NSIS)"
+    cmds:
+      - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
+      - |
+        {{if eq OS "windows"}}
+        makensis -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
+        {{else}}
+        makensis -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
+        {{end}}
+      - cmd: powershell Remove-Item -Force runtime.zip -ErrorAction SilentlyContinue
+        platforms: [windows]
+      - cmd: rm -f runtime.zip
+        platforms: [linux, darwin]
+    vars:
+      ARCH: "{{.ARCH | default ARCH}}"
+      ARG_FLAG: '{{if eq (.ARCH | default ARCH) "amd64"}}AMD64{{else}}ARM64{{end}}'
 
   run:
     cmds:

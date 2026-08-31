@@ -50,7 +50,7 @@ func TestEnsurePortableUsesBundledPackage(t *testing.T) {
 	if !launchReady(portableDir()) {
 		t.Fatal("local package was not extracted into the portable directory")
 	}
-	if len(statuses) == 0 || statuses[0] != "首次启动，正在解压内置运行环境…" {
+	if len(statuses) == 0 || statuses[0] != "正在准备运行环境…" {
 		t.Fatalf("unexpected statuses: %v", statuses)
 	}
 	if _, err := os.Stat(zipPath); err != nil {
@@ -78,7 +78,7 @@ func TestEnsurePortableReplacesDifferentVERSION(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(statuses) == 0 || statuses[0] != "检测到新版本，正在更新运行环境…" {
+	if len(statuses) == 0 || statuses[0] != "正在升级运行环境…" {
 		t.Fatalf("unexpected statuses: %v", statuses)
 	}
 	if _, err := os.Stat(marker); err == nil {
@@ -113,7 +113,7 @@ func TestEnsurePortableKeepsMatchingVERSION(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(statuses) == 0 || statuses[0] != "正在使用已有运行环境…" {
+	if len(statuses) == 0 || statuses[0] != "正在加载运行环境…" {
 		t.Fatalf("unexpected statuses: %v", statuses)
 	}
 	if _, err := os.Stat(marker); err != nil {
